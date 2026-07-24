@@ -10,3 +10,6 @@
 [submodule "create_ap"]
 	path = tools/create_ap
 	url = https://github.com/Roboparty/create_ap.git
+[submodule "camera"]
+	path = src/camera
+	url = https://github.com/Roboparty/roboparty_camera.git
