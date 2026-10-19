@@ -3,6 +3,15 @@ import os
 import argparse
 import sys
 import yaml
+
+# Prefer this workspace's driver over an older system installation.
+workspace_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+driver_dir = os.path.join(
+    workspace_dir, "install", "roboparty_motors", "lib",
+    f"python{sys.version_info.major}.{sys.version_info.minor}", "site-packages",
+)
+if os.path.isdir(driver_dir):
+    sys.path.insert(0, driver_dir)
 import motors_py
 import time
 import termios
