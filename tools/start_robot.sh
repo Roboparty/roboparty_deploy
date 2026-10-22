@@ -91,6 +91,8 @@ done
 validate_name "robot" "$ROBOT"
 validate_name "policy" "$POLICY"
 
+export ROBOT_CONTROL_ISOLATION="${ROBOT_CONTROL_ISOLATION:-isolated}"
+
 # 函数：启动组件并检查（先启动ROS节点，再设置实时优先级）
 start_component() {
     local session_name=$1
@@ -99,8 +101,22 @@ start_component() {
     local sleep_time=$4
 
     print_info "启动 $session_name ..."
-    # 在screen会话中启动ROS命令，并确保传递DDS配置环境变量
-    screen -dmS $session_name bash -c "source install/setup.bash; export RMW_IMPLEMENTATION='$RMW_IMPLEMENTATION'; export RMW_FASTRTPS_USE_QOS_FROM_XML='$RMW_FASTRTPS_USE_QOS_FROM_XML'; export FASTRTPS_DEFAULT_PROFILES_FILE='$FASTRTPS_DEFAULT_PROFILES_FILE'; $launch_cmd; exec bash"
+    local screen_args=(-dmS "$session_name")
+    local authenticate=""
+    if [ "$session_name" = "inference_session" ] && [ "$ROBOT_CONTROL_ISOLATION" = "isolated" ] && [ "$EUID" -ne 0 ]; then
+        if [ -t 0 ] && [ -t 1 ]; then
+            print_info "请在会话内完成 sudo 验证，随后自动转入后台；仅隔离管理程序提权"
+            screen_args=(-S "$session_name")
+            # sudo credentials belong to this screen's terminal.
+            authenticate='sudo -v || exit 1; screen -d "$STY"; '
+        else
+            print_info "无交互终端，隔离管理程序将使用 sudo 非交互授权"
+        fi
+    fi
+    screen "${screen_args[@]}" bash -c "${authenticate}source install/setup.bash; export RMW_IMPLEMENTATION='$RMW_IMPLEMENTATION'; export RMW_FASTRTPS_USE_QOS_FROM_XML='$RMW_FASTRTPS_USE_QOS_FROM_XML'; export FASTRTPS_DEFAULT_PROFILES_FILE='$FASTRTPS_DEFAULT_PROFILES_FILE'; $launch_cmd; exec bash" || {
+        cleanup_sessions
+        return 1
+    }
     sleep $sleep_time
 
     if ! ros2 node list | grep -q "$node_name"; then
@@ -258,9 +274,15 @@ source install/setup.bash
 # 停止可能正在运行的screen会话
 print_info "停止现有相关screen会话..."
 cleanup_sessions
+if [ -e /run/roboparty-realtime.lock ]; then
+    if ! (flock -x -w 25 9) 9< /run/roboparty-realtime.lock; then
+        print_error "上一推理实例仍未退出或未完成恢复，请检查 screen -r inference_session"
+        exit 1
+    fi
+fi
 
-start_component "inference_session" "ros2 launch roboparty_inference inference.launch.py robot:=$ROBOT policy:=$POLICY" "inference_node" 5
-start_component "joy_session" "ros2 run joy joy_node" "joy_node" 2
+start_component "inference_session" "ros2 launch roboparty_inference inference.launch.py robot:=$ROBOT policy:=$POLICY" "inference_node" 5 || exit 1
+start_component "joy_session" "ros2 run joy joy_node" "joy_node" 2 || exit 1
 
 # 验证节点的 DDS 配置
 verify_dds_effectiveness
