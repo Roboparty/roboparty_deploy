@@ -304,7 +304,6 @@ screen -S joy_session -X quit
 ```bash
 ./tools/start_robot.sh --robot rpo --policy default
 ./tools/start_robot.sh --robot rpo --policy amp
-./tools/start_robot.sh --robot rpo --policy attn_enc
 ./tools/start_robot.sh --robot rpo --policy beyondmimic
 ./tools/start_robot.sh --robot rpo --policy getup
 ./tools/start_robot.sh --robot rpo --policy interrupt

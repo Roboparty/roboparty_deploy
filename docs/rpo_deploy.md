@@ -304,7 +304,6 @@ The `policy` argument selects a policy configuration from `src/inference/robots/
 ```bash
 ./tools/start_robot.sh --robot rpo --policy default
 ./tools/start_robot.sh --robot rpo --policy amp
-./tools/start_robot.sh --robot rpo --policy attn_enc
 ./tools/start_robot.sh --robot rpo --policy beyondmimic
 ./tools/start_robot.sh --robot rpo --policy getup
 ./tools/start_robot.sh --robot rpo --policy interrupt

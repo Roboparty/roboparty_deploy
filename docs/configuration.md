@@ -18,7 +18,7 @@ Robot startup selects a robot directory with `--robot` and a policy in that dire
 
 | Robot directory | Motor count | Default hardware | Current policy configurations |
 | --- | --- | --- | --- |
-| `rpo` | 23 | DM / CAN, HIPNUC serial | `default`, `amp`, `attn_enc`, `beyondmimic`, `getup`, `interrupt`, `parkour` |
+| `rpo` | 23 | DM / CAN, HIPNUC serial | `default`, `amp`, `beyondmimic`, `getup`, `interrupt`, `parkour` |
 | `rp1_24dof` | 24 | LRO / CAN FD, HIPNUC CAN | `default`, `beyondmimic`, `ufo` |
 
 UFO uses the 24-motor `rp1_24dof` configuration. The 28-motor `rp1` uses separate hardware and policy configurations. Models, observations, joint mappings, and zero references must match the selected robot and training configuration.
@@ -116,7 +116,7 @@ Observation entries use `name:size` or `name:size@tap|tap`. `size` is the single
 | `last_action` | `joint_num` | Model output from the preceding inference step, processed by `clip_actions` and `action_rescale` and stored in policy joint order |
 | `motion_command` | `2 × joint_num` | Reference joint positions and velocities from motion data; requires the corresponding `motion_names` entry |
 | `interrupt` | 1 | Interrupt mode state, `0` / `1` |
-| `perception` | Matches publisher | Perception vector, such as parkour's 128-dimensional depth encoding or attn_enc's 187-dimensional external perception |
+| `perception` | Matches publisher | Perception vector, such as parkour's 128-dimensional depth encoding |
 | `latent` | Matches `z.shape[1]` | Current latent vector; UFO uses 256 dimensions and requires a corresponding `latent_names` entry |
 
 ### Observation History

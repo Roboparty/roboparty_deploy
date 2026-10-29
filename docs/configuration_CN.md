@@ -18,7 +18,7 @@
 
 | 机器人目录 | 电机数量 | 默认硬件 | 当前策略配置 |
 | --- | --- | --- | --- |
-| `rpo` | 23 | DM / CAN，HIPNUC 串口 | `default`、`amp`、`attn_enc`、`beyondmimic`、`getup`、`interrupt`、`parkour` |
+| `rpo` | 23 | DM / CAN，HIPNUC 串口 | `default`、`amp`、`beyondmimic`、`getup`、`interrupt`、`parkour` |
 | `rp1_24dof` | 24 | LRO / CAN FD，HIPNUC CAN | `default`、`beyondmimic`、`ufo` |
 
 UFO 对应 `rp1_24dof` 的 24 电机配置；28 电机的 `rp1` 使用独立的硬件和策略配置。模型、观测、关节映射及零位参数须与所选机器人和训练配置一致。
@@ -116,7 +116,7 @@ RPO 的 `motor_num: [6, 7, 5, 5]` 将电机数组依次划分为 6、7、5、5 �
 | `last_action` | `joint_num` | 上一推理步的模型输出，经 `clip_actions` 和 `action_rescale` 处理，按策略关节顺序记录 |
 | `motion_command` | `2 × joint_num` | 动作文件中的参考关节位置与速度，需要对应的 `motion_names` |
 | `interrupt` | 1 | Interrupt 模式状态，`0` / `1` |
-| `perception` | 与发布方一致 | 感知向量，例如 parkour 的 128 维深度编码或 attn_enc 的 187 维外部感知 |
+| `perception` | 与发布方一致 | 感知向量，例如 parkour 的 128 维深度编码 |
 | `latent` | 与 `z.shape[1]` 一致 | 当前 latent 向量，UFO 为 256 维，需要对应的 `latent_names` |
 
 ### 历史观测
