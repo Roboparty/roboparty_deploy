@@ -78,14 +78,12 @@ See the [DM driver](../src/motors/src/drivers/dm/dm_motor_driver.hpp) and [LRO d
 | Parameter | Type / length | Meaning |
 | --- | --- | --- |
 | `robot.type` | String | Closed-chain mechanism type: `rpo` or `rp1`. `rp1_24dof` uses `rp1`; the robot directory is selected by the `--robot` startup argument |
-| `robot.kp` | Number array, `N` | Default MIT stiffness gains in motor order |
-| `robot.kd` | Number array, `N` | Default MIT damping gains in motor order |
 | `robot.motor_sign` | Integer array, `N` | Motor directions, normally `1` / `-1`, in motor order; applied to position, velocity, and effort conversions |
 | `robot.close_chain_motor_idx` | Integer array, currently 4 entries | Zero-based positions in the `motor_id` array for closed-chain motors, ordered as the left pair followed by the right pair |
 | `robot.urdf2motor` | Integer array, `N` | `urdf2motor[j]` is the motor-array index for logical joint `j`; use a complete permutation of `0..N-1` |
 | `robot.extrinsic_R` | Number array, 9 entries | IMU mounting rotation matrix flattened by rows. The implementation uses `omega_body = R * omega_imu` and `q_body = q_imu * inverse(q_R)` |
 
-The default `kp/kd` in `robot.yaml` define runtime MIT control gains and are shared by policies in that robot directory. Changing `rp1_24dof` gains affects default, BeyondMimic, and UFO. Gains also enter the joint-to-motor conversion for closed-chain control and must match the mechanism. That conversion divides by closed-chain motor `kp`, so those gains must be positive. `extrinsic_R` must be a valid rotation matrix matching the IMU mounting.
+`extrinsic_R` must be a valid rotation matrix matching the IMU mounting.
 
 ## Inference Policy Configuration
 
@@ -153,10 +151,11 @@ Ordinary policies fill every history frame with current observations on the firs
 | `obs_scales_dof_pos` | Number | Scale for joint position observations relative to default angles. Default `1.0` |
 | `obs_scales_dof_vel` | Number | Joint velocity observation scale. Default `1.0` |
 | `obs_scales_gravity_b` | Number | Unit gravity observation scale. Default `1.0` |
-| `clip_observations` | Non-negative number | Clamp scaled single-frame observations to `[-value, value]`. Default `100.0` |
-| `clip_actions` | Non-negative number | Clamp raw model output to `[-value, value]` before `action_rescale`. Code default `18.0` |
+| `clip_observations` | Non-negative number | Clamp scaled single-frame observations to `[-value, value]`. Default: no clipping |
+| `clip_actions` | Non-negative number | Clamp raw model output to `[-value, value]` before `action_rescale`. Default: no clipping |
 | `action_rescale` | Number | Extra multiplier after action clipping. Default `1.0`; UFO uses `8.0`. Also affects `last_action` observations |
 | `action_scale` | Number array, 1 or `joint_num` entries | Converts actions to joint-angle offsets, in logical joint order. A single value broadcasts to every joint. Default `[0.3]` |
+| `kp`, `kd` | Number arrays, `joint_num` entries | Required policy gains in logical joint order. `kp` must be finite and positive, `kd` finite and non-negative |
 | `usd2urdf` | Integer array, `joint_num` entries | Mapping from policy output index to logical joint index. `usd2urdf[i]` is the joint for model entry `i`; use a complete zero-based permutation |
 | `clip_cmd` | Number array, 6 entries | `[vx_min, vx_max, vy_min, vy_max, yaw_min, yaw_max]`; linear velocity in m/s, yaw in rad/s. Limits gamepad and `cmd_vel` commands. Default `[-0.4, 0.6, -0.4, 0.4, -0.8, 0.8]` |
 | `joint_default_angle` | Number array, `joint_num` entries, rad | Default pose in logical joint order, used for reset, relative position observations, and action-target offsets |
@@ -167,6 +166,8 @@ Ordinary policies fill every history frame with current observations on the firs
 | `gamma` | Number | Latent look-ahead window weight for frame `i` is `gamma^i`. Default `0.8`; normally use `0 <= gamma <= 1` |
 | `window_size` | Positive integer | Number of forward latent frames to blend, using remaining frames near the end. Default `1`, UFO uses `3`. The blend is normalized to the first latent frame's norm |
 
+MIT gains `kp/kd` use logical joint order for inference and reset. Reset applies `kp / 2.5` during the transition, then restores full stiffness. Closed-chain conversion divides by stiffness, so `kp` must be positive.
+
 Action conversion uses the following order, where `i` is a model output index and `j` is a logical joint index:
 
 ```text
@@ -176,7 +177,7 @@ target[j] = joint_default_angle[j] + action_scale[j] * a[i]
 filtered_target[j] = act_alpha * target[j] + (1 - act_alpha) * previous_target[j]
 ```
 
-`action_scale`, `joint_default_angle`, and `joint_limits` use logical joint order. Hardware gains, offsets, and directions use motor order, linked through `urdf2motor`. Timing, scales, observation layouts, and joint mappings must match training. Parameter changes require corresponding validation of model inputs and action outputs.
+Model actions are mapped to logical joint order by `usd2urdf`. `kp/kd`, `action_scale`, `joint_default_angle`, and `joint_limits` use logical joint order. Hardware offsets and directions use motor order, linked through `urdf2motor`. Timing, scales, observation layouts, and joint mappings must match training. Parameter changes require corresponding validation of model inputs and action outputs.
 
 ### Parameters Supplied by Launch
 

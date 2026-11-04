@@ -118,14 +118,14 @@ finally:
 
 - `RobotInterface(config_file: str)`: Read the YAML file and create the motor and IMU drivers. Construction opens communication interfaces; `init_motors()` enables the motors. Relative paths are resolved from the current working directory.
 
-All joint vectors use the logical order in the configuration. `p`, the target passed to `reset_joints()`, and every non-empty `v`, `kp`, `kd`, and `tau` vector must match the motor count; `reset_joints()` validates length and finite values; callers of `apply_action()` must provide correctly sized vectors.
+All joint vectors use the logical joint order in the configuration. `p`, `kp`, `kd`, the target passed to `reset_joints()`, and every non-empty `v` and `tau` vector must match the motor count. Pass the selected policy's `kp`/`kd` in logical joint order; the interface maps joint vectors to motor order through `urdf2motor`. `reset_joints()` and `apply_action()` validate lengths and values.
 
 ### Member Methods
 
 - `init_motors() -> None`: Initialize and enable all motors. Driver return codes are not returned to Python.
 - `deinit_motors() -> None`: Disable all motors.
-- `apply_action(p: List[float], v: List[float] = [], kp: List[float] = [], kd: List[float] = [], tau: List[float] = []) -> None`: Send joint MIT commands. Position is in radians, velocity in rad/s, and `tau` is feed-forward torque. Empty `v`/`tau` vectors use zero, while empty `kp`/`kd` vectors use configured values. Command transmission requires initialized motors; the function returns immediately otherwise.
-- `reset_joints(joint_default_angle: List[float]) -> None`: Smoothly move the robot to the target angles in about four seconds.
+- `apply_action(p: List[float], v: List[float], kp: List[float], kd: List[float], tau: List[float] = []) -> None`: Send joint MIT commands. Position is in radians, velocity in rad/s, and `tau` is feed-forward torque. `v` is required; empty `v`/`tau` vectors use zero. `kp`/`kd` are required and must be finite; `kp` must be positive and `kd` non-negative. Command transmission requires initialized motors; the function returns immediately otherwise.
+- `reset_joints(joint_default_angle: List[float], kp: List[float], kd: List[float]) -> None`: Smoothly move the robot to the target angles in about four seconds. `kp`/`kd` use the same validation as `apply_action()`.
 - `read_joints() -> None`: Convert asynchronous motor feedback caches to logical joint order and update the joint cache.
 - `refresh_joints() -> None`: Ask each driver to refresh status, wait one second, and update the joint cache. Exact refresh behavior depends on the driver.
 - `read_imu() -> None`: Transform the asynchronous IMU cache into the body frame and update the IMU cache.
@@ -152,7 +152,9 @@ try:
     robot.init_motors()
     robot.refresh_joints()
     joint_q = robot.get_joint_q()
-    robot.apply_action(joint_q)
+    kp = [40.0] * len(joint_q)  # Use the selected policy's gains
+    kd = [2.0] * len(joint_q)
+    robot.apply_action(joint_q, [], kp, kd)
 finally:
     if robot.is_init:
         robot.deinit_motors()

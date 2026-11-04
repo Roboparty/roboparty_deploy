@@ -78,14 +78,12 @@ RPO 的 `motor_num: [6, 7, 5, 5]` 将电机数组依次划分为 6、7、5、5 �
 | 参数 | 类型 / 长度 | 含义 |
 | --- | --- | --- |
 | `robot.type` | 字符串 | 闭链机构解耦类型，支持 `rpo`、`rp1`；`rp1_24dof` 对应 `rp1`，机器人目录由启动参数 `--robot` 选择 |
-| `robot.kp` | 数值数组，`N` | 默认 MIT 刚度增益，按电机顺序排列 |
-| `robot.kd` | 数值数组，`N` | 默认 MIT 阻尼增益，按电机顺序排列 |
 | `robot.motor_sign` | 整数数组，`N` | 各电机方向，通常为 `1` / `-1`，按电机顺序排列，作用于位置、速度与 effort 转换 |
 | `robot.close_chain_motor_idx` | 整数数组，当前为 4 个 | 闭链电机的零起始数组索引，对应 `motor_id` 数组中的位置，按左侧一对、右侧一对排列 |
 | `robot.urdf2motor` | 整数数组，`N` | `urdf2motor[j]` 给出逻辑关节 `j` 对应的电机数组索引，应是 `0..N-1` 的完整排列 |
 | `robot.extrinsic_R` | 数值数组，9 个 | IMU 安装旋转矩阵，按行展开为 3×3；当前实现的角速度转换为 `omega_body = R * omega_imu`，四元数转换为 `q_body = q_imu * inverse(q_R)` |
 
-`robot.yaml` 的 `kp/kd` 定义运行时 MIT 控制增益，是同一机器人目录内各策略共用的默认值。调整 `rp1_24dof` 的增益会影响 default、BeyondMimic 和 UFO。闭链控制中增益还参与关节到电机的换算，应与实际机构匹配；当前换算以闭链电机的 `kp` 为分母，要求对应增益大于零。`extrinsic_R` 应为合法的旋转矩阵，并与 IMU 实际安装方向一致。
+`extrinsic_R` 应为合法的旋转矩阵，并与 IMU 实际安装方向一致。
 
 ## 推理策略配置
 
@@ -153,10 +151,11 @@ obs_stack_orders: ["obs_major"]
 | `obs_scales_dof_pos` | 数值 | 关节相对默认角度的观测缩放；默认 `1.0` |
 | `obs_scales_dof_vel` | 数值 | 关节速度的观测缩放；默认 `1.0` |
 | `obs_scales_gravity_b` | 数值 | 单位重力向量的观测缩放；默认 `1.0` |
-| `clip_observations` | 非负数 | 缩放后的单帧观测逐元素限制到 `[-值, 值]`；默认 `100.0` |
-| `clip_actions` | 非负数 | 原始模型输出逐元素限制到 `[-值, 值]`，发生在 `action_rescale` 之前；代码默认 `18.0` |
+| `clip_observations` | 非负数 | 缩放后的单帧观测逐元素限制到 `[-值, 值]`；默认不裁剪 |
+| `clip_actions` | 非负数 | 原始模型输出逐元素限制到 `[-值, 值]`，发生在 `action_rescale` 之前；默认不裁剪 |
 | `action_rescale` | 数值 | 裁剪后模型输出的额外乘数；默认 `1.0`，UFO 为 `8.0`，也会影响 `last_action` 观测 |
 | `action_scale` | 数值数组，1 或 `joint_num` 个 | 将动作转换为关节角偏移，按逻辑关节顺序排列；单值广播到全部关节，代码默认 `[0.3]` |
+| `kp`、`kd` | 数值数组，`joint_num` 个 | 必需的策略增益，按逻辑关节顺序排列。`kp` 必须有限且为正，`kd` 必须有限且非负 |
 | `usd2urdf` | 整数数组，`joint_num` 个 | 策略索引到逻辑关节索引的映射；`usd2urdf[i]` 是模型第 `i` 项对应的逻辑关节，应为完整的零起始排列 |
 | `clip_cmd` | 数值数组，6 个 | `[vx_min, vx_max, vy_min, vy_max, yaw_min, yaw_max]`；线速度为 m/s，偏航为 rad/s，限制手柄及 `cmd_vel` 指令；默认 `[-0.4, 0.6, -0.4, 0.4, -0.8, 0.8]` |
 | `joint_default_angle` | 数值数组，`joint_num` 个，rad | 逻辑关节顺序下的默认姿态，同时用于复位、关节位置观测和动作目标偏置 |
@@ -167,6 +166,8 @@ obs_stack_orders: ["obs_major"]
 | `gamma` | 数值 | latent 前向窗口中第 `i` 帧的权重为 `gamma^i`；默认 `0.8`，通常取 `0 <= gamma <= 1` |
 | `window_size` | 正整数 | latent 从当前帧向后融合的帧数；末尾不足时使用剩余帧，默认 `1`，UFO 为 `3`；融合后按首帧 latent 的范数归一化 |
 
+MIT 增益 `kp/kd` 按逻辑关节顺序排列，用于推理和复位。复位过渡期间使用 `kp / 2.5`，结束后恢复完整刚度。闭链换算以刚度为分母，因此 `kp` 必须大于零。
+
 动作转换按以下顺序进行，`i` 为模型输出索引，`j` 为逻辑关节索引：
 
 ```text
@@ -176,7 +177,7 @@ target[j] = joint_default_angle[j] + action_scale[j] * a[i]
 filtered_target[j] = act_alpha * target[j] + (1 - act_alpha) * previous_target[j]
 ```
 
-`action_scale`、`joint_default_angle`、`joint_limits` 使用逻辑关节顺序，`robot.yaml` 的 `kp/kd`、零偏和方向使用电机顺序；二者通过 `urdf2motor` 关联。周期、缩放、观测布局及关节映射均须与训练配置一致。相关参数变更应同步验证模型输入与动作输出。
+模型 action 通过 `usd2urdf` 映射到逻辑关节顺序。`kp/kd`、`action_scale`、`joint_default_angle`、`joint_limits` 使用逻辑关节顺序，`robot.yaml` 的零偏和方向使用电机顺序，通过 `urdf2motor` 关联。周期、缩放、观测布局及关节映射均须与训练配置一致。相关参数变更应同步验证模型输入与动作输出。
 
 ### launch 自动提供的参数
 

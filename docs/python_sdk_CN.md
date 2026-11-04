@@ -118,14 +118,14 @@ finally:
 
 - `RobotInterface(config_file: str)`: 读取 YAML 并创建电机和 IMU 驱动。构造阶段打开通信接口，电机使能通过 `init_motors()` 执行；相对路径按当前工作目录解析。
 
-所有关节向量均采用配置中的逻辑关节顺序。`p`、`reset_joints()` 的目标以及非空的 `v`、`kp`、`kd`、`tau` 必须与电机数量一致；`reset_joints()` 会检查长度和数值有效性；`apply_action()` 的调用者须保证所有向量长度正确。
+所有关节向量均采用配置中的逻辑关节顺序。`p`、`kp`、`kd`、`reset_joints()` 的目标以及非空的 `v`、`tau` 必须与电机数量一致。调用方按逻辑关节顺序传入所选策略的 `kp`/`kd`；接口通过 `urdf2motor` 将关节向量映射到电机顺序。`reset_joints()` 和 `apply_action()` 会检查长度和数值有效性。
 
 ### 成员方法
 
 - `init_motors() -> None`: 初始化并使能所有电机。
 - `deinit_motors() -> None`: 失能所有电机。
-- `apply_action(p: List[float], v: List[float] = [], kp: List[float] = [], kd: List[float] = [], tau: List[float] = []) -> None`: 发送关节 MIT 指令；位置为 rad、速度为 rad/s、`tau` 为前馈力矩。空的 `v`/`tau` 使用零值，空的 `kp`/`kd` 使用配置值。指令发送以电机已初始化为前置条件；未初始化时函数直接返回。
-- `reset_joints(joint_default_angle: List[float]) -> None`: 用约 4 秒将机器人平滑移动到目标角度。
+- `apply_action(p: List[float], v: List[float], kp: List[float], kd: List[float], tau: List[float] = []) -> None`: 发送关节 MIT 指令；位置为 rad、速度为 rad/s、`tau` 为前馈力矩。`v` 为必填参数；空的 `v`/`tau` 使用零值。`kp`/`kd` 必须传入且有限，`kp` 为正、`kd` 非负。指令发送以电机已初始化为前置条件；未初始化时函数直接返回。
+- `reset_joints(joint_default_angle: List[float], kp: List[float], kd: List[float]) -> None`: 用约 4 秒将机器人平滑移动到目标角度；`kp`/`kd` 的校验规则与 `apply_action()` 相同。
 - `read_joints() -> None`: 基于电机异步反馈缓存，转换为逻辑关节顺序并更新关节缓存。
 - `refresh_joints() -> None`: 调用各驱动刷新状态，等待 1 秒后更新关节缓存；具体刷新行为取决于驱动。
 - `read_imu() -> None`: 将 IMU 异步缓存转换到机身坐标系并更新 IMU 缓存。
@@ -152,7 +152,9 @@ try:
     robot.init_motors()
     robot.refresh_joints()
     joint_q = robot.get_joint_q()
-    robot.apply_action(joint_q)
+    kp = [40.0] * len(joint_q)  # 使用所选策略的增益
+    kd = [2.0] * len(joint_q)
+    robot.apply_action(joint_q, [], kp, kd)
 finally:
     if robot.is_init:
         robot.deinit_motors()
