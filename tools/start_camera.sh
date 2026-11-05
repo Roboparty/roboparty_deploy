@@ -104,7 +104,9 @@ cleanup_camera_sessions() {
     local session
     # depth_session is the legacy name used by start_robot_depth.sh.
     for session in realsense_session camera_session depth_session; do
-        screen -S "$session" -X quit 2>/dev/null || true
+        # 参数指定的会话保留，用于查看启动失败原因
+        [ "$session" = "${1:-}" ] && continue
+        screen -S "$session" -X quit &>/dev/null || true
     done
 }
 
@@ -224,7 +226,7 @@ fi
 
 print_info "编译相机组件..."
 COLCON_BASE_PATHS=(src/camera)
-BUILD_PACKAGES=(camera)
+BUILD_PACKAGES=(roboparty_camera)
 ALLOW_OVERRIDING=()
 if [ -f src/camera/thirdparty/realsense-ros/realsense2_camera/package.xml ]; then
     COLCON_BASE_PATHS+=(src/camera/thirdparty/realsense-ros)
@@ -250,8 +252,8 @@ if ! ros2 pkg prefix realsense2_camera &>/dev/null; then
     print_error "realsense2_camera 未找到。请检查内置 src/camera/thirdparty/realsense-ros 是否完整，或安装 ROS 2 RealSense 包"
     exit 1
 fi
-if ! ros2 pkg prefix camera &>/dev/null; then
-    print_error "camera 包未找到，请检查 src/camera 是否编译成功"
+if ! ros2 pkg prefix roboparty_camera &>/dev/null; then
+    print_error "roboparty_camera 包未找到，请检查 src/camera 是否编译成功"
     exit 1
 fi
 
@@ -263,15 +265,19 @@ print_info "RealSense 配置文件: $REALSENSE_CONFIG"
 screen -dmS realsense_session bash -c "source install/setup.bash; export RMW_IMPLEMENTATION='$RMW_IMPLEMENTATION'; export RMW_FASTRTPS_USE_QOS_FROM_XML='$RMW_FASTRTPS_USE_QOS_FROM_XML'; export FASTRTPS_DEFAULT_PROFILES_FILE='$FASTRTPS_DEFAULT_PROFILES_FILE'; ros2 launch realsense2_camera rs_launch.py config_file:='$REALSENSE_CONFIG'; exec bash"
 
 if ! verify_realsense_startup "$DEPTH_TOPIC"; then
-    cleanup_camera_sessions
+    # 停止仍在运行的启动命令，保留会话以便查看输出
+    screen -S realsense_session -X stuff $'\003'
+    cleanup_camera_sessions realsense_session
     exit 1
 fi
 
 print_info "启动 camera_session（depth_node）..."
-screen -dmS camera_session bash -c "source install/setup.bash; export RMW_IMPLEMENTATION='$RMW_IMPLEMENTATION'; export RMW_FASTRTPS_USE_QOS_FROM_XML='$RMW_FASTRTPS_USE_QOS_FROM_XML'; export FASTRTPS_DEFAULT_PROFILES_FILE='$FASTRTPS_DEFAULT_PROFILES_FILE'; ros2 launch camera depth.launch.py policy:='$POLICY' start_camera:=false; exec bash"
+screen -dmS camera_session bash -c "source install/setup.bash; export RMW_IMPLEMENTATION='$RMW_IMPLEMENTATION'; export RMW_FASTRTPS_USE_QOS_FROM_XML='$RMW_FASTRTPS_USE_QOS_FROM_XML'; export FASTRTPS_DEFAULT_PROFILES_FILE='$FASTRTPS_DEFAULT_PROFILES_FILE'; ros2 launch roboparty_camera depth.launch.py policy:='$POLICY' start_camera:=false; exec bash"
 
 if ! verify_depth_startup "$DEPTH_OBS_TOPIC"; then
-    cleanup_camera_sessions
+    # 停止仍在运行的启动命令，保留会话以便查看输出
+    screen -S camera_session -X stuff $'\003'
+    cleanup_camera_sessions camera_session
     exit 1
 fi
 

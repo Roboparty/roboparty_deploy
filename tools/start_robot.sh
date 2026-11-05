@@ -121,15 +121,18 @@ start_component() {
 
     if ! ros2 node list | grep -q "$node_name"; then
         print_error "$session_name 启动失败！未检测到 $node_name 节点。"
-        cleanup_sessions
+        # 停止仍在运行的启动命令，保留会话以便查看输出
+        screen -S "$session_name" -X stuff $'\003'
+        cleanup_sessions "$session_name"
+        print_info "查看输出: screen -r $session_name"
         exit 1
     fi
 }
 
-# 函数：清理所有会话
+# 函数：清理所有会话，参数指定的会话除外
 cleanup_sessions() {
-    screen -S inference_session -X quit 2>/dev/null
-    screen -S joy_session -X quit 2>/dev/null
+    [ "${1:-}" = inference_session ] || screen -S inference_session -X quit &>/dev/null
+    [ "${1:-}" = joy_session ] || screen -S joy_session -X quit &>/dev/null
 }
 
 # 函数：详细验证 DDS 配置是否生效
@@ -165,8 +168,8 @@ verify_dds_effectiveness() {
     # 3. 检查进程是否使用了 Fast DDS
     print_info "检查进程 DDS 实现..."
     for node in "inference_node" "joy_node"; do
-        local pid=$(pgrep -x "$node" 2>/dev/null)
-        if [ -n "$pid" ]; then
+        local pid
+        for pid in $(pgrep -f "(^|/)$node([[:space:]]|$)" 2>/dev/null); do
             # 检查进程环境变量
             local env_file="/proc/$pid/environ"
             if [ -f "$env_file" ]; then
@@ -182,7 +185,7 @@ verify_dds_effectiveness() {
                     print_error "$node RMW 实现不正确"
                 fi
             fi
-        fi
+        done
     done
     
     # 4. 检查共享内存传输
