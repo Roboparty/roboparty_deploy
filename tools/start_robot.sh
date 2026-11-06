@@ -268,7 +268,9 @@ fi
 
 # 编译推理包
 print_info "编译推理包..."
-colcon build --symlink-install || {
+colcon build --symlink-install \
+    --base-paths src \
+    --packages-up-to roboparty_inference || {
     print_error "推理包编译失败"
     exit 1
 }
