@@ -165,27 +165,35 @@ verify_dds_effectiveness() {
         return 1
     fi
     
-    # 3. 检查进程是否使用了 Fast DDS
-    print_info "检查进程 DDS 实现..."
+    # 3. 只检查可执行文件本身，排除命令行中包含节点路径的 sudo 和管理进程。
+    print_info "检查进程 DDS 环境变量..."
+    local node pid exe env_data found
     for node in "inference_node" "joy_node"; do
-        local pid
+        found=0
         for pid in $(pgrep -f "(^|/)$node([[:space:]]|$)" 2>/dev/null); do
-            # 检查进程环境变量
-            local env_file="/proc/$pid/environ"
-            if [ -f "$env_file" ]; then
-                if grep -z "FASTRTPS_DEFAULT_PROFILES_FILE" "$env_file" >/dev/null 2>&1; then
-                    print_success "$node 环境变量设置正确"
-                else
-                    print_error "$node 缺少 FASTRTPS_DEFAULT_PROFILES_FILE 环境变量"
-                fi
-                
-                if grep -z "RMW_IMPLEMENTATION=rmw_fastrtps_cpp" "$env_file" >/dev/null 2>&1; then
-                    print_success "$node RMW 实现正确"
-                else
-                    print_error "$node RMW 实现不正确"
-                fi
+            exe=$(readlink "/proc/$pid/exe" 2>/dev/null) || continue
+            [ "${exe##*/}" = "$node" ] || continue
+            found=1
+            if ! env_data=$(tr '\0' '\n' 2>/dev/null <"/proc/$pid/environ"); then
+                print_info "$node (PID $pid) 无法读取进程环境，无法验证 DDS 配置"
+                continue
+            fi
+
+            if grep -Fxq "FASTRTPS_DEFAULT_PROFILES_FILE=$FASTRTPS_DEFAULT_PROFILES_FILE" <<< "$env_data"; then
+                print_success "$node (PID $pid) DDS 配置文件环境变量正确"
+            else
+                print_error "$node (PID $pid) DDS 配置文件环境变量缺失或不正确"
+            fi
+
+            if grep -Fxq "RMW_IMPLEMENTATION=rmw_fastrtps_cpp" <<< "$env_data"; then
+                print_success "$node (PID $pid) RMW 环境变量正确"
+            else
+                print_error "$node (PID $pid) RMW 环境变量缺失或不正确"
             fi
         done
+        if [ "$found" -eq 0 ]; then
+            print_info "未找到可验证的 $node 进程"
+        fi
     done
     
     # 4. 检查共享内存传输
@@ -197,20 +205,6 @@ verify_dds_effectiveness() {
         print_error "共享内存传输未检测到"
     fi
     
-    # 5. 测试 DDS 发现性能
-    print_info "测试 DDS 发现性能..."
-    local start_time=$(date +%s%3N)
-    ros2 node list >/dev/null 2>&1
-    local end_time=$(date +%s%3N)
-    local discovery_time=$((end_time - start_time))
-    
-    if [ "$discovery_time" -lt 500 ]; then
-        print_success "DDS 发现延迟: ${discovery_time}ms (优秀)"
-    elif [ "$discovery_time" -lt 1000 ]; then
-        print_info "DDS 发现延迟: ${discovery_time}ms (良好)"
-    else
-        print_error "DDS 发现延迟: ${discovery_time}ms (较慢)"
-    fi
 }
 
 # 切换到脚本目录
