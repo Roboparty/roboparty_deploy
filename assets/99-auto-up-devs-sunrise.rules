@@ -1,4 +1,4 @@
-SUBSYSTEM=="net", ACTION=="add", KERNELS=="spi5.0", KERNEL=="can*", NAME="can4"
+ACTION=="add", SUBSYSTEM=="spi", KERNEL=="spi5.0", ENV{MODALIAS}=="spi:tcan4x5x", RUN{program}:="/bin/true"
 
 SUBSYSTEM=="net", ACTION=="add", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="606f", KERNELS=="1-1.2.1", KERNEL=="can*", NAME="can0", RUN+="/sbin/ip link set can0 up type can bitrate 1000000", RUN+="/sbin/ip link set can0 txqueuelen 1000"
 
